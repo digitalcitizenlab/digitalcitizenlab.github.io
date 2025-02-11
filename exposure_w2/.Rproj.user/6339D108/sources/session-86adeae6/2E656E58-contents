@@ -1,0 +1,565 @@
+---
+title: "Zweitstimme.org-Briefing"
+format:
+  html:
+    embed-resources: true
+    code-fold: true
+    code-summary: "Show code"
+    toc: true
+    toc-location: left
+    toc-title: "Inhaltsverzeichnis"
+    css: |
+      p {
+        text-align: justify;
+      }
+execute:
+  echo: false
+toc: true
+toc-level: 4
+---
+
+```{r}
+library(pacman)
+p_load(tidyverse, rio, sf, patchwork, httr, jsonlite, plotly, scales, kableExtra, png)
+
+coal_majo <- function(share, share_above_hurdle){
+  if(any(share < 0.05)){
+    return(FALSE)
+  } else {
+    return(sum(share)/share_above_hurdle > 0.5)
+  }
+}
+
+parties <- c("SPD", "CDU/CSU", "Linke", "AfD", "BSW", "FDP", "Grüne")
+wks <- seq(1, 299)
+
+set.seed(123)
+df_prognosen <- expand.grid(Party = parties, Wahlkreis = wks) %>%
+    mutate(mandate_probability = runif(n()))
+
+# Load shapefile
+wahlkreise_sf <- st_read("data/in/wks/btw25_geometrie_wahlkreise_shp/btw25_geometrie_wahlkreise_shp.shp", quiet = T)
+df_partycolors <- import("data/in/party_colours.xlsx") %>% drop_na(alt_name) %>% filter(short_name != "CSU") %>%
+  mutate(alt_name = case_match(alt_name, 
+                               "CDU" ~ "CDU/CSU", 
+                               "Die Grünen" ~ "Grüne",
+                               "Die Linke" ~ "Linke",
+                               .default = alt_name)) %>%
+  select(alt_name, color = primary_colour)
+
+wahlkreise_joined <- df_prognosen %>%
+  left_join(wahlkreise_sf, by = c("Wahlkreis" = "WKR_NR"))
+
+report_wk <- 78
+report_wk_name <- wahlkreise_joined[wahlkreise_joined$Wahlkreis == report_wk, "WKR_NAME"][1]
+today <- format(Sys.Date(), "%d.%m.%Y")
+
+
+
+
+# Move to rendering script later
+## Get Wahlkreisprognosen
+response <- GET("http://polsci.uni-wh.de:8073/forecast_districts")
+json_data <- content(response, as = "text")
+parsed_data <- fromJSON(json_data, flatten = TRUE)
+df_forecasts_districts <- as.data.frame(parsed_data) %>% 
+  left_join(df_partycolors, by = c("partei" = "alt_name"))
+
+## Get Federal Forecast
+response <- GET("http://polsci.uni-wh.de:8073/forecast")
+json_data <- content(response, as = "text")
+parsed_data <- fromJSON(json_data, flatten = TRUE)
+df_forecasts_federal <- as.data.frame(parsed_data)
+
+## Get Vacant Constituencies
+response <- GET("http://polsci.uni-wh.de:8073/pred_vacant")
+json_data <- content(response, as = "text")
+parsed_data <- fromJSON(json_data, flatten = TRUE)
+df_forecasts_vacant <- as.data.frame(parsed_data)
+
+## Get Draws
+response <- GET("http://polsci.uni-wh.de:8073/draws")
+json_data <- content(response, as = "text")
+parsed_data <- fromJSON(json_data, flatten = TRUE)
+df_draws <- as.data.frame(parsed_data) 
+
+
+response <- GET("https://polsci.uni-wh.de/pred_probabilities")
+json_data <- content(response, as = "text")
+parsed_data <- fromJSON(json_data, flatten = TRUE)
+df_scenarios_new <- as.data.frame(parsed_data) 
+```
+# Wahlvorhersage vom `r today`
+Vielen Dank für Ihre Teilnahme an unserer Umfrage! Als Dankeschön möchten wir Ihnen in diesem Dokument die vorläufigen Ergebnisse unserer Wahlvorhersage für den Wahlkreis `r report_wk` (`r report_wk_name`) sowie für den bundesweiten Wahlausgang präsentieren.
+
+Das Dokument gliedert sich in zwei Abschnitte:
+
+1. [**Prognosen für den Wahlkreis `r report_wk` (`r report_wk_name`)**](#chapter-wk)  
+   In diesem Abschnitt beleuchten wir, welche Partei mit ihren Kandidatinnen und Kandidaten im Wahlkreis die besten Chancen hat. Unsere Analysen geben Ihnen einen Überblick über die aktuelle Stimmung und die wahrscheinlichen Ergebnisse in Ihrem Wahlkreis.
+
+2. [**Prognosen zum bundesweiten Wahlausgang**](#chapter-bt)  
+   Hier erhalten Sie Einblicke in die erwarteten Zweitstimmenanteile der Parteien sowohl bundesweit als auch in verschiedenen Wahlkreisen. Darüber hinaus betrachten wir Szenarien wie: welche Partei die stärkste Kraft wird, wer die 5%-Hürde überwindet und welche Parteikonstellationen rechnerisch eine Mehrheit für die Regierungsbildung erzielen könnten.
+
+Wir hoffen, Ihnen mit diesen Vorhersagen wertvolle Einblicke in die bevorstehenden Wahlen zu geben!
+
+## Wahlkreis `r report_wk` (`r report_wk_name`){#chapter-wk}
+### Erwartete Erststimmenverteilung im Wahlkreis `r report_wk`
+```{r}
+df_forecasts_districts %>%
+  filter(wkr == report_wk,
+         !partei %in% c("AND", "And.")) %>%
+  mutate(value_label = round(value, 1),
+         value_label = ifelse(value_label %% 1 == 0, str_c(value_label, ".0"), value_label),
+         value_label = str_replace_all(value_label, "\\.", ",")) %>% 
+  ggplot(aes(x = reorder(partei, -value), y = value, fill = partei)) +
+  # Add background bars for value_l1 and nudge them to the left
+  geom_col(aes(y = value_l1), alpha = 0.1, position = position_nudge(x = -0.1)) +
+  geom_linerange(aes(ymin = low, ymax = high, color = partei), linewidth = 10, alpha = 0.3,
+                 position=position_dodge(width=.5)) +
+  geom_linerange(aes(ymin = low, ymax = high, color = partei), linewidth = 10, alpha = 0.7,
+                 position=position_dodge(width=.5)) +
+    scale_y_continuous(labels = percent_format(scale = 1)) +  # Convert y-axis to percentages
+  geom_point(size = 6, color = "white", shape = 21, stroke = 2) +
+  geom_point(size = 2, fill = "white", shape = 21) +
+  scale_color_manual(values = df_forecasts_districts$color, breaks = df_forecasts_districts$partei) +
+  scale_fill_manual(values = df_forecasts_districts$color, breaks = df_forecasts_districts$partei) +
+  theme_minimal() +
+  theme(
+    legend.position = "none",
+    plot.title = element_text(face = "bold", size = 16, hjust = 0.5),
+    plot.subtitle = element_text(size = 12, hjust = 0.5),
+    axis.text.x = element_text(size = 8, face = "bold", color = "black"),
+    axis.ticks.y = element_blank(),
+    axis.line.y = element_blank(),
+    panel.grid.major.x = element_blank(),
+    panel.grid.minor.x = element_blank(),
+    plot.margin = margin(10, 10, 10, 10)
+  ) +
+  labs(
+    x = NULL,
+    y = "Erwarteter Erststimmenanteil in Prozent",
+    caption = "Erststimmenergebnisse bei der Bundestagswahl 2021 im Hintergrund",
+  ) +
+  geom_text(aes(label = value_label, y = value), hjust = 2, size = 3, color = "black")
+```
+Jede der großen Parteien tritt in jedem Wahlkreis mit einer Kandidatin oder einem Kandidaten an. In dieser Abbildung stellen wir den Stimmenanteil mit Punkten dar, den unser Modell für die Kandidaten der jeweiligen Parteien im Wahlkreis `r report_wk` erwartet. Die farblich hervorgehobenen Balken zeigen die Intervalle, in denen die erwarteten Stimmenanteile in mindestens X von X simulierten Wahlausgägen lagen.
+
+Die Balken im Hintergrund zeigen die Erststimmenergebnisse im Wahlkreis `r report_wk` bei der Bundestagswahl 2021.
+
+
+### Wessen Kandidatin oder Kandidat hat die besten Aussichten, das stärkste Erststimmenergebnis im Wahlkreis `r report_wk` zu erzielen?
+```{r}
+df_forecasts_districts %>%
+  filter(wkr == report_wk,
+         !partei %in% c("AND", "And."),
+         probability > 0) %>%
+  ggplot(aes(x = probability, y = reorder(partei, probability), color = partei)) +
+    geom_point(size = 8) +
+  scale_x_continuous(labels = percent_format(scale = 1),
+                      limits = c(0, 100)) +  
+  scale_color_manual(values = df_forecasts_districts$color, breaks = df_forecasts_districts$partei) +
+  scale_fill_manual(values = df_forecasts_districts$color, breaks = df_forecasts_districts$partei) +
+  theme_void() +
+  theme(
+    legend.position = "none",
+    plot.title = element_text(face = "bold", size = 16, hjust = 0.5),
+    plot.subtitle = element_text(size = 12, hjust = 0.5),
+    axis.text.y = element_text(size = 8, face = "bold", color = "black"),
+    axis.ticks.x = element_blank(),
+    axis.line.x = element_blank(),
+    panel.grid.major.y = element_blank(),
+    panel.grid.minor.y = element_blank(),
+    plot.margin = margin(10, 10, 10, 10)
+  ) +
+  labs(
+    y = NULL,
+    x = "Wahrscheinlichkeit, dass eine Partei die meisten Erststimmen erhält",
+  ) +
+  geom_text(
+    aes(
+      y = partei,
+      x = probability,
+      label = ifelse(probability > 0, paste0(probability, "%"), "0%")  # Label as 0% for missing data
+    ),
+    hjust = -1,  # Moved text further to the right
+    size = 3.5,      # Set text size
+    fontface = "bold",  # Make text bold
+    color = "black"     # Make text black
+  )
+```
+Das deutsche Wahlrechtsieht für jeden Wahlkreis die direkte Wahl einer Kandidatin bzw. eines Kandidaten stattfindet. Dabei zieht die Kandidatin oder der Kandidat mit den meisten Erststimmen direkt in den Bundestag ein (In welchen Wahlkreisen dies aufgrund der jüngsten Wahlrechtsänderungen möglicherweise nicht der Fall ist, erfahren Sie weiter unten.).
+
+Die folgende Abbildung zeigt die Wahrscheinlichkeiten, mit denen die Kandidatinnen und Kandidaten der verschiedenen Parteien im Wahlkreis `r report_wk` die meisten Erststimmen gewinnen könnten. Die Partei mit der höchsten Wahrscheinlichkeit, die meisten Erststimmen zu erhalten, wird durch den längsten Balken dargestellt.
+
+### Erwartete Zweitstimmenverteilung im Wahlkreis `r report_wk`
+```{r}
+df_forecasts_districts %>%
+  filter(wkr == report_wk,
+         !partei %in% c("AND", "And.")) %>%
+  mutate(value_label = round(zs_value, 1),
+         value_label = ifelse(value_label %% 1 == 0, str_c(value_label, ".0"), value_label),
+         value_label = str_replace_all(value_label, "\\.", ",")) %>% 
+  ggplot(aes(x = reorder(partei, -zs_value), y = zs_value, fill = partei)) +
+  # Add background bars for zs_value_l1 and nudge them to the left
+  geom_col(aes(y = zs_value_l1), alpha = 0.1, position = position_nudge(x = -0.1)) +
+  geom_linerange(aes(ymin = zs_low, ymax = zs_high, color = partei), linewidth = 10, alpha = 0.3,
+                 position = position_dodge(width=.5)) +
+  geom_linerange(aes(ymin = zs_low, ymax = zs_high, color = partei), linewidth = 10, alpha = 0.7,
+                 position=position_dodge(width=.5)) +
+  scale_y_continuous(labels = percent_format(scale = 1)) +  # Convert y-axis to percentages
+  geom_point(size = 6, color = "white", shape = 21, stroke = 2) +
+  geom_point(size = 2, fill = "white", shape = 21) +
+  scale_color_manual(values = df_forecasts_districts$color, breaks = df_forecasts_districts$partei) +
+  scale_fill_manual(values = df_forecasts_districts$color, breaks = df_forecasts_districts$partei) +
+  theme_minimal() +
+  theme(
+    legend.position = "none",
+    plot.title = element_text(face = "bold", size = 16, hjust = 0.5),
+    plot.subtitle = element_text(size = 12, hjust = 0.5),
+    axis.text.x = element_text(size = 8, face = "bold", color = "black"),
+    axis.ticks.y = element_blank(),
+    axis.line.y = element_blank(),
+    panel.grid.major.x = element_blank(),
+    panel.grid.minor.x = element_blank(),
+    plot.margin = margin(10, 10, 10, 10)
+  ) +
+  labs(
+    x = NULL,
+    y = "Erwarteter Zweitstimmenanteil in Prozent",
+    caption = "Zweitstimmenergebnisse bei der Bundestagswahl 2021 im Hintergrund",
+  ) +
+  geom_text(aes(label = value_label, y = zs_value), hjust = 2, size = 3, color = "black")
+```
+Neben der Erststimme geben Wählerinnen und Wähler ihre Zweitstimmen für die Parteien ab. Die folgende Abbildung zeigt die erwarteten Zweitstimmenanteile der Parteien im Wahlkreis `r report_wk`. Die prozentuale Verteilung aller Zweitstimmen in einem Bundesland entscheidet schließlich sowohl darüber, wie viele seiner Sitze die Parteien jeweils im Bundestag erhalten, als auch darüber wieviele Direktmandate maximal an eine Partei vergeben werden können.
+Die Balken im Hintergrund zeigen nun die Zweitstimmenergebnisse im Wahlkreis `r report_wk` bei der Bundestagswahl 2021.
+
+
+## Bundesweite Wahlvorhersage{#chapter-bt}
+### Erwartete Bundesweite Zweitstimmenverteilung
+```{r}
+df_forecasts_federal %>% mutate(value_label = round(value, 1),
+                       value_label = ifelse(value_label %% 1 == 0, str_c(value_label, ".0"), value_label),
+                       value_label = str_replace_all(value_label, "\\.", ",")) %>% 
+  ggplot(aes(x = reorder(name, -value), y = value, color = name, fill = name)) +
+  geom_hline(yintercept = 5, linetype = "dotted", linewidth = .5, color = "black") +
+  geom_linerange(aes(ymin = low95, ymax = high95), linewidth = 10, alpha = 0.3, position=position_dodge(width=.5)) + # , col = party_colors[all_fcst$party_name]) +
+  geom_linerange(aes(ymin = low, ymax = high), linewidth = 10, alpha = 0.7, position=position_dodge(width=.5)) + # , col = party_colors[all_fcst$party_name]) +
+  geom_point(size = 6, color = "white", shape = 21, stroke = 2) +
+  geom_point(size = 2, fill = "white", shape = 21) +
+  scale_color_manual(values = df_forecasts_federal$color, breaks = df_forecasts_federal$name) +
+  scale_fill_manual(values = df_forecasts_federal$color, breaks = df_forecasts_federal$name) +
+    scale_y_continuous(labels = percent_format(scale = 1)) +  # Convert y-axis to percentages
+  theme_minimal() +
+  theme(
+    legend.position = "none",
+    plot.title = element_text(face = "bold", size = 16, hjust = 0.5),
+    plot.subtitle = element_text(size = 12, hjust = 0.5),
+    axis.text.x = element_text(size = 8, face = "bold", color = "black"),
+    axis.ticks.y = element_blank(),
+    axis.line.y = element_blank(),
+    panel.grid.major.x = element_blank(),
+    panel.grid.minor.x = element_blank(),
+    plot.margin = margin(10, 10, 10, 10)
+  ) +
+  labs(
+    x = NULL,
+    y = "Erwarteter Zweitstimmenanteil in Prozent",
+  ) +
+  geom_text(aes(label = value_label, y = value), hjust = 2, size = 3, color = "black")
+
+```
+Die folgende Abbildung zeigt die erwarteten Zweitstimmenanteile der Parteien bei der Bundestagswahl 2025. Die prozentuale Verteilung aller Zweitstimmen in einem Bundesland entscheidet schließlich darüber, wie viele Sitze die Parteien jeweils im Bundestag erhalten. Neben den farblich stärler hervorgehobenen Fehlertoleranzen, zeigen die etwas helleren Balken um die Punkte jene Intervalle, in denen die erwarteten Stimmenanteile in mindestens X von X simulierten Wahlausgängen lagen, und bilden somit eine etwas konservativere Schätzung der mit den erwarteten Stimmenanteilen verbundenen Unsicherheit.
+### Wo liegt welche Partei vorn?
+```{r}
+for (p in parties) {
+gdf <- wahlkreise_sf %>% left_join(df_forecasts_districts, by = c("WKR_NR" = "wkr")) 
+party_color <- df_partycolors$color[df_partycolors$alt_name == p][1]
+temp_name <- paste0("plot_wkprob_", str_replace_all(tolower(p), " ", ""))    
+
+assign(temp_name,
+gdf %>%
+  filter(partei == p) %>%
+  mutate(zs_value = case_when(is.na(zs_value) ~ 0,
+                                        T ~ zs_value),
+         zs_value = zs_value/100) %>%
+  ggplot() +
+  geom_sf(aes(fill = zs_value)) +
+  theme_void() +
+  scale_fill_gradient(
+    low = "white", 
+    labels = scales::percent,  # Convert values to percentage labels
+    high = party_color, 
+  #  limits = c(0, 1),  # Specify that the scale goes from 0 to 1
+    name = "Wahrschenlichkeit\nWahlkreisgewinn"
+  ) + 
+    theme(
+    legend.position = "none",  # Remove the legend
+    #legend.position = "right",
+    plot.title = element_text(hjust = 0.5)
+  )+
+  labs(title = p)
+)
+}
+
+final_plot <- (`plot_wkprob_cdu/csu` | plot_wkprob_spd | plot_wkprob_grüne | plot_wkprob_afd | plot_wkprob_linke | plot_wkprob_bsw | plot_wkprob_fdp)
+ggsave("plots/temp/final_plot.png", final_plot, height = 6, width = 12)
+```
+<img src="plots/temp/final_plot.png" alt="Wahrscheinlichkeiten der Parteien" width="700">
+
+Die Parteien sind in unterschiedlichen Teilen des Landes verschieden stark. Die obigen Karten zeigen die Verteilung der von uns in den Wahlkreisen berechneten Zweitstimmenanteile. Die Karten sind farblich kodiert: Je dunkler die Farbe, desto höher der Zweitstimmenanteil der jeweiligen Partei. 
+
+Für jede Partei werden somit Besonderheiten sichtbar: Während die Grünen in Ostdeutschland außerhalb der Großstädte deutlich weniger Wählerinnen und Wähler haben, sind diese Regionen die Hochburgen von AfD, Linken und BSW. Die Sozialdemokraten sind im Norden des Landes deutlich stärker als im Süden, während die CDU/CSU in Bayern und Baden-Württemberg besonders stark ist, jedoch auch in Nordrhein-Westfalen sowie der Niedersächsischen Grenzregion nach Westen viele Wählerinnen und Wähler überzeugt. Während auch die FDP höhere Zweitstimmenanteile im Westen des Ländes erzielt, ist der Unterschied zwischen den Regionen vergleichsweise gering.
+
+### Wo könnten die stärksten Kandidatinen und Kandidaten trotz gewonnener Wahlkreise nicht in den Bundestag einziehen?
+```{r}
+gdf <- wahlkreise_sf %>% left_join(df_forecasts_vacant, by = c("WKR_NR" = "wkr")) 
+party_color <- df_partycolors$primary_colour[df_partycolors$alt_name == p][1]
+
+
+gdf %>% ggplot() +
+  geom_sf(aes(fill = abandon_p)) +
+  theme_void()+
+  scale_fill_gradient(
+    low = "white", 
+        labels = scales::percent,  # Convert values to percentage labels
+    high = "darkred", 
+    limits = c(0, 1),  # Specify that the scale goes from 0 to 1
+    name = "Wahrscheinlichkeit, dass\nWahlkreisgewinner:in\nnicht direkt einzieht"
+  ) 
+```
+
+Die Karte zeigt die Wahrscheinlichkeit, dass die Kandidatinnen und Kandidaten, die in den Wahlkreisen gewinnen, nicht in den Bundestag einziehen, weil ihre Partei in der Zweitstimmenverteilung nicht genügend Stimmen erhält. Dies ist eine Konsequenz des neuen Wahlrechts, welches in der vergangenen Wahlperiode verabschiedet und nun zum ersten Mal bei einer Bundestagswahl zum Einsatz kommen wird. Wichtig hervorzuheben ist, dass dies keinesfalls zwingend bedeutet, dass die jeweiligen Wahlkreise nicht im Bundestag vertreten sind. So tritt der überwiegende Teil der Abgeordneten, die mit einem Listenmandat in den Bundestag einziehen, in einem Wahlkreis an, den sie nicht gewonnen haben.
+
+Die Wahrscheinlichkeit wird durch die Farbe der Wahlkreise dargestellt: Je dunkler die Farbe, desto höher die Wahrscheinlichkeit, dass die Kandidatinnen und Kandidaten trotz gewonnener Wahlkreise nicht in den Bundestag einziehen.
+
+Die Folgende Tabelle ermöglicht die genaue Betrachtung jedes einzelnen Wahlkreises.
+
+```{r}
+gdf %>%
+  as.data.frame() %>%
+  select(Wahlkreisnummer = WKR_NR,
+         Name = WKR_NAME,
+         abandon_p) %>%
+  drop_na(abandon_p) %>%
+  arrange(desc(abandon_p)) %>%
+  mutate(abandon_p = paste0(abandon_p*100, "%")) %>%
+  rename("Wahrscheinlichkeit, dass Wahlkreisgewinner:in nicht direkt einzieht" = abandon_p) %>%
+  tibble() %>%
+  kable("html") %>%
+  kable("html", escape = FALSE) %>%
+  kable_styling(full_width = FALSE) %>%
+  scroll_box(height = "500px")
+```
+
+### Szenarien
+```{r}
+df_scenarios <- df_draws %>%
+  mutate(draw = 1:n()) %>% 
+  pivot_longer(cdu:lin, values_to = "posterior_draw", names_to = "party") %>% 
+  group_by(draw) %>%
+  summarise(share_above_hurdle = sum(posterior_draw[posterior_draw > 0.05]),
+            afd_larger = max(posterior_draw) == posterior_draw[party == "afd"],
+            spd_larger = max(posterior_draw) == posterior_draw[party == "spd"],
+            cdu_larger = max(posterior_draw) == posterior_draw[party == "cdu"],
+            
+            cduspdgreens = coal_majo(c(posterior_draw[party == "cdu"],posterior_draw[party == "spd"],posterior_draw[party == "gru"]),share_above_hurdle),
+            cdugreens = coal_majo(c(posterior_draw[party == "cdu"],posterior_draw[party == "gru"]),share_above_hurdle),
+            cduspd = coal_majo(c(posterior_draw[party == "cdu"],posterior_draw[party == "spd"]),share_above_hurdle),
+            # cdu = coal_majo(c(posterior_draw[party == "cdu"]),share_above_hurdle),
+            
+            left_hurdle = posterior_draw[party == "lin"] > 0.05,
+            fdp_hurdle = posterior_draw[party == "fdp"] > 0.05,
+            bsw_hurdle = posterior_draw[party == "bsw"] > 0.05,
+            
+            
+  ) %>%
+  ungroup() %>%
+  summarise("\n\nCDU/CSU"  = mean(cdu_larger)*100,
+            "\n\nAfD"  = mean(spd_larger)*100,
+            "\n\nSPD"  = mean(afd_larger)*100,
+
+            "CDU/CSU + SPD + Grüne" = mean(cduspdgreens)*100,
+            "\nCDU/CSU + Grüne" = mean(cdugreens) *100,
+            "\nCDU/CSU + SPD" = mean(cduspd) * 100,
+            # "CDU/CSU allein" = mean(cdu) * 100,
+            
+            
+            "\n\nLinke" = mean(left_hurdle)*100,
+            "\n\nFDP" = mean(fdp_hurdle)*100,
+            "\n\nBSW" = mean(bsw_hurdle)*100,
+            ) %>% 
+  # Round all values to 0 decimal places
+  round(0) %>% 
+  pivot_longer(cols = 1:ncol(.), names_to = "category", values_to = "probability")
+
+df_scenarios$type <- c(
+  rep("Stärkste Partei", 3), # winner_* categories
+  rep("Mehrheit", 3),    # coalition categories
+  rep("5%-Hürde", 3)         # party_hurdle categories
+)
+
+all_parties <- tibble(category = unique(parties))  # Replace `Parties` with your actual vector of party names
+
+```
+Basierend auf den Simulationen, die wir durchgeführt haben, können wir verschiedene Szenarien betrachten, die bei der Bundestagswahl eintreten könnten. Die folgenden Grafiken zeigen die Wahrscheinlichkeiten für Ereignisse, welche ausschlaggebend für die Zusammensetzung des neuen Bundestags sowie die Bildung verschiedener Koalitionskonstellationen sein könnten.
+
+#### Wer wird stärkste Kraft?
+Die Frage, welche Partei die stärkste Kraft wird, hat für sich genommen keine wahlrechtlichen Konsequenzen, ist aber dennoch von zentraler Bedeutung für die Regierungsbildung. So agiert die stärkste Kraft, sofern sie realistische Koalitionsoptionen hat, als Formateur, also jene Partei, die potenzielle Mehrheiten im Parlament sondiert. 
+
+Die folgende Grafik zeigt die Wahrscheinlichkeiten, mit denen die verschiedenen Parteien die stärkste Kraft im Bundestag werden, und somit am wahrscheinlichsten als Formateur agieren, könnten.
+
+```{r}
+df_scenarios %>%
+  mutate(
+    category = str_remove_all(category, "\n"),
+    round_prob = paste0(probability, "%")  # Format rounded probability string
+  ) %>%
+  mutate(category = case_match(category, "CDU" ~ "CDU/CSU", .default = category)) %>%
+  filter(type == "Stärkste Partei") %>%
+  # Merge with all possible parties and fill missing probabilities with 0
+  full_join(all_parties, by = "category") %>%
+  replace_na(list(probability = 0)) %>%
+  left_join(df_partycolors, by = c("category" = "alt_name")) %>%
+  mutate(category = fct_reorder(category, probability)) %>%  # Arrange categories by probability
+  ggplot() +
+  geom_point(
+    aes(
+      x = probability,
+      y = category,
+      colour = color
+    ),
+    size = 8  # Increased size of points for better visibility
+  ) +
+  geom_text(
+    aes(
+      y = category,
+      x = probability,
+      label = ifelse(probability > 0, round_prob, "0%")  # Label as 0% for missing data
+    ),
+    hjust = -1,  # Moved text further to the right
+    size = 3.5,      # Set text size
+    fontface = "bold",  # Make text bold
+    color = "black"     # Make text black
+  ) +
+  theme_void() +
+  scale_colour_identity() +  # Use colors directly for points
+  scale_x_continuous(
+    labels = scales::percent_format(scale = 1),  # Format scale as percentages
+    limits = c(0, 100)  # Ensure scale goes from 0 to 100%
+  ) +
+  theme(axis.text.y = element_text(face = "bold", size = rel(1.2)),
+        axis.title.x  = element_text()) +
+  labs(
+    x = "Wahrscheinlichkeit, dass die Partei stärkste Kraft wird (In Prozent)",
+    y = ""
+  )
+```
+
+#### Wer erreicht die 5%-Hürde?
+Sollte eine Partei nicht drei Direktmandate erreichen, so muss sie mindestens 5% der Zweitstimmen erhalten, um in den Bundestag einzuziehen. Die folgende Grafik zeigt die Wahrscheinlichkeiten, mit denen die verschiedenen Parteien die 5%-Hürde überwinden und somit in den Bundestag einziehen könnten. 
+
+**⚠ Wichtig**: Die dargestellten Werte beziehen sich lediglich auf die Wahrscheinlichkeit, dass die entsprechenden Parteien die 5%-Hürde zu überwinden, und nicht auf die Wahrscheinlichkeit, dass die Partei tatsächlich in den Bundestag einzieht.
+```{r}
+df_scenarios %>%
+  mutate(
+    category = str_remove_all(category, "\n"),
+    round_prob = paste0(probability, "%")  # Format rounded probability string
+  ) %>%
+  mutate(category = case_match(category, "CDU" ~ "CDU/CSU", .default = category)) %>%
+  filter(type == "5%-Hürde") %>%
+  # Merge with all possible parties and fill missing probabilities with 0
+  # full_join(all_parties, by = "category") %>%
+  # replace_na(list(probability = 0)) %>%
+  left_join(df_partycolors, by = c("category" = "alt_name")) %>%
+  mutate(category = fct_reorder(category, probability)) %>%  # Arrange categories by probability
+  ggplot() +
+  geom_point(
+    aes(
+      x = probability,
+      y = category,
+      colour = color  # Map point color to primary_colour hex code
+    ),
+    size = 8  # Increased size of points for better visibility
+  ) +
+  geom_text(
+    aes(
+      y = category,
+      x = probability,
+      label = ifelse(probability > 0, round_prob, "0%")  # Label as 0% for missing data
+    ),
+    hjust = -1,  # Moved text further to the right
+    size = 3.5,      # Set text size
+    fontface = "bold",  # Make text bold
+    color = "black"     # Make text black
+  ) +
+  theme_void() +
+  scale_fill_identity() +  # Use colors directly from primary_colour
+  scale_colour_identity() +  # Use colors directly for points
+  scale_x_continuous(
+    labels = scales::percent_format(scale = 1),  # Format scale as percentages
+    limits = c(0, 100)  # Ensure scale goes from 0 to 100%
+  ) +
+  theme(axis.text.y = element_text(face = "bold", size = rel(1.2)),
+        axis.title.x  = element_text()) +
+  labs(
+    x = "Wahrscheinlichkeit Übertreffen 5%-Hürde (In Prozent)",
+    y = ""
+  )
+
+```
+
+
+#### Welche Koalitionen hätten die rechnerische Mehrheit, eine Koalition zu bilden?
+Um eine Koalition zu bilden, die über eine alleinige Mehrheit verfügt, benötigt eine Gruppe von Parteien mindestens 50% der Sitze im Deutschen Bundestag. Die folgende Grafik zeigt die Wahrscheinlichkeiten, mit denen die aktuell meistdiskutierten Parteikonstellationen rechnerisch eine Mehrheit für die Regierungsbildung erzielen könnten.
+
+**⚠ Wichtig**: Auch hier handelt es sich nicht um die Wahrscheinlichkeit, dass die entsprechenden Parteien tatsächlich eine Koalition bilden, sondern lediglich um die Wahrscheinlichkeit, dass die Parteien rechnerisch eine Mehrheit erzielen könnten. Diese Unterscheidung ist ungemein wichtig, da die tatsächliche Regierungsbildung von einer Vielzahl weiterer Faktoren abhängt, etwa die weltanschaulichen Positionen der Parteien, ihre thematischen Schwerpunkte oder personellen Ansprüchen.
+```{r}
+df_scenarios_new
+
+
+
+
+df_scenarios %>%
+  mutate(
+    category = str_remove_all(category, "\n"),
+    category = case_when(
+      category == "CDU/CSU + SPD + Grüne" ~ "Kenia\n(CDU/CSU, SPD & Grüne)",
+      category == "CDU/CSU + SPD" ~ "Große Koalition\n(CDU/CSU & SPD)",
+      category == "CDU/CSU + Grüne" ~ "Schwarz-Grün\n(CDU/CSU & Grüne)",
+      TRUE ~ category
+    ),
+    round_prob = paste0(probability, "%")  # Format rounded probability string
+  ) %>%
+  left_join(df_partycolors, by = c("category" = "alt_name")) %>%
+  filter(type == "Mehrheit") %>%
+  mutate(category = fct_reorder(category, probability)) %>%  # Arrange categories by probability
+  ggplot() +
+  geom_col(aes(x = probability, y = category)) +
+  geom_text(
+    aes(
+      y = category,
+      x = probability,
+      label = round_prob
+    ),
+    hjust = -0.2,  # Adjust horizontal alignment slightly outside the bar
+    size = 3.5,      # Set text size
+    fontface = "bold",  # Make text bold
+    color = "black"     # Make text black
+  ) +
+  theme_void() +
+  scale_fill_identity() +  # Use colors directly from primary_colour
+  scale_x_continuous(
+    labels = scales::percent_format(scale = 1),  # Format scale as percentages
+    limits = c(0, 110)  # Ensure scale goes from 0 to 100%
+  ) +
+  theme(axis.text.y = element_text(face = "bold", size = rel(1.2)),
+        axis.title.x  = element_text()) +
+  labs(
+    x = "Wahrscheinlichkeit, dass diese\nKonstellationen eine rechnerische Mehrheit erzielt",
+    y = ""
+  )
+```
+
+## Vielen Dank für Ihr Interesse!
+Sollten Sie Fragen zu den Ergebnissen oder Anregungen haben, können Sie uns gerne unter der folgenden Mailadresse erreichen: [wahlen@uni-mannheim.de](mailto:wahlen@uni-mannheim.de).
+Häufige Fragen samt Antworten finden Sie zudem über unsere Website: [zweitstimme.org](zweitstimme.org/)

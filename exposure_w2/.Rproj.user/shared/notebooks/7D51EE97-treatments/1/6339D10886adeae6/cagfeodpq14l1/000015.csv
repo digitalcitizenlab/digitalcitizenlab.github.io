@@ -1,0 +1,9 @@
+"0","export(df, ""loop_merge.xls"")
+"
+"2","Warning in export(df, ""loop_merge.xls"") :"
+"2"," 'export' is deprecated.
+Use 'orca' instead.
+See help(""Deprecated"")
+"
+"2","Error: File type xls not supported
+"

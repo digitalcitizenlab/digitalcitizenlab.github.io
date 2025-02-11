@@ -1,0 +1,1 @@
+{"frames":[{"func":"export(df, \"loop_merge.xls\")","file":"","line_number":0,"end_line_number":0,"character_number":0,"end_character_number":0},{"func":"stop(\"File type \", fileType, \" not supported\", call. = FALSE)","file":"","line_number":0,"end_line_number":0,"character_number":0,"end_character_number":0}],"message":"Error: File type xls not supported\n"}
