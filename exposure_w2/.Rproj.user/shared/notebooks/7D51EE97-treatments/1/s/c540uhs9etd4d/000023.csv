@@ -1,4 +1,0 @@
-"0","report_wk_name <- wahlkreise_joined[wahlkreise_joined$Wahlkreis == report_wk, ""WKR_NAME""][1]
-"
-"2","Error: object 'wahlkreise_joined' not found
-"

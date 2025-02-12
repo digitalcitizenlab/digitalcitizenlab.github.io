@@ -1,5 +1,0 @@
-"0","wahlkreise_joined <- df_prognosen %>%
-  left_join(wahlkreise_sf, by = c(""Wahlkreis"" = ""WKR_NR""))
-"
-"2","Error: object 'wahlkreise_sf' not found
-"
