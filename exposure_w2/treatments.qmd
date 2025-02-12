@@ -135,10 +135,11 @@ temp_forecast <- df_forecasts_districts %>%
   coord_cartesian(clip = "off")
 
   
-ggsave(filename = paste0("plots/wk_forecast_w_uncert/wk_", w, ".png"), 
+ggsave(filename = glue("plots/wk_forecast_w_uncert/wk_{wkr_name}.png"), 
        plot = temp_forecast,
               bg = "white",
-       width = 7, height = 4)
+       width = 7, height = 4,
+       create.dir = TRUE)
 }
 ```
 
@@ -196,10 +197,11 @@ temp_forecast <- df_forecasts_districts %>%
     caption = "Quelle: <b>zweitstimme.org</b>, Lizenz: CC BY-SA 4.0") +
   coord_cartesian(clip = "off")
 
-ggsave(filename = paste0("plots/wk_forecast_wo_uncert/wk_", w, ".png"), 
+ggsave(filename = glue("plots/wk_forecast_wo_uncert/wk_{wkr_name}.png"), 
        plot = temp_forecast,
               bg = "white",
-       width = 7, height = 4)
+       width = 7, height = 4,
+       create.dir = TRUE)
 }
 ```
 
@@ -254,10 +256,11 @@ temp_forecast <- df_forecasts_districts %>%
     caption = "Quelle: <b>zweitstimme.org</b>, Lizenz: CC BY-SA 4.0") +
   coord_cartesian(clip = "off")
   
-ggsave(filename = paste0("plots/wk_gewwahrscheinl_wo_uncert/wk_", w, ".png"), 
+ggsave(filename = glue("plots/wk_gewwahrscheinl_wo_uncert/wk_{wkr_name}.png"), 
        plot = temp_forecast,
               bg = "white",
-       width = 7, height = 4)
+       width = 7, height = 4,
+       create.dir = TRUE)
 }
 ```
 
