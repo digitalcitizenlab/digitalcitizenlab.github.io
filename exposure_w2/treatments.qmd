@@ -209,6 +209,8 @@ ggsave(filename = glue("plots/wk_forecast_wo_uncert/wk_{wkr_name}.png"),
 
 ```{r}
 for (w in wks) {
+wkr_name <- df_forecasts_districts %>%
+  filter(wkr == w) %>% pull(wkr_name)  %>% first()
 temp_forecast <- df_forecasts_districts %>%
   filter(wkr == w,
          !partei %in% c("AND", "And.")) %>%
