@@ -136,7 +136,7 @@ ul li::before {
 ## And we might not even agree on what the problem is...
 
 - **The fundamental subjectivity of hate speech**  
-  - Likely varies by culture, context of speech, and individual preferences
+  - Likely varies by culture, context of speech, and individual prefs
   - [Why it's impossible to agree on what's allowed](https://danluu.com/impossible-agree/) (Dan Luu) and the ["No vehicles in the park" rule](https://novehiclesinthepark.com/)
   
 ]
@@ -166,7 +166,7 @@ ul li::before {
 ## And we might not even agree on what the problem is...
 
 - **The fundamental subjectivity of hate speech**  
-  - Likely varies by culture, context, individual
+  - Likely varies by culture, context of speech, and individual prefs
   - [Why it's impossible to agree on what's allowed](https://danluu.com/impossible-agree/) (Dan Luu) and the ["No vehicles in the park" rule](https://novehiclesinthepark.com/)
   
 ## ... and how it should be tackled
@@ -210,6 +210,28 @@ ul li::before {
 <img src="pics/image-hatespeech.jpg" style="width:90%">
 </div>
 ]
+
+
+---
+# Pre-registered hypotheses
+
+## Myside bias
+
+**H1:** Respondents who **agree (vs. disagree) with the issue position of the target** are more likely to
+- perceive messages as being hate speech and offensive speech and 
+- prefer platform, legal, and employer action against the message/sender.
+
+
+## Identity-based in-group/out-group bias
+
+**H2:** Respondents who **share gender or ethnicity with the target** are more likely to
+- perceive messages as being hate speech and offensive speech and 
+- prefer platform, legal, and employer action against the message/sender.
+
+**H3:** Respondents who **share gender or ethnicity with the sender** are less likely to
+- perceive messages as being hate speech and offensive speech and 
+- prefer platform, legal, and employer action against the message/sender.
+
 
 
 
@@ -259,7 +281,10 @@ class: inverse, center, middle
 
 .pull-left[
 
-<table border="1" cellpadding="6" cellspacing="0" style="border-collapse: collapse;">
+<br>
+<br>
+
+<table border="1" cellpadding="6" cellspacing="0" style="border-collapse: collapse; font-size: 16px;">
   <thead>
     <tr>
       <th>Attribute</th>
@@ -269,10 +294,10 @@ class: inverse, center, middle
   <tbody>
     <tr>
       <td>① Topic</td>
-      <td>14 topics (feminism, homosexuality, religiosity, partisanship, …)</td>
+      <td>14 topics (feminism, religiosity, partisanship, ...)</td>
     </tr>
     <tr>
-      <td>② Target topic stance</td>
+      <td>② Target stance</td>
       <td>left, right</td>
     </tr>
     <tr>
