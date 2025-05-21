@@ -1,5 +1,5 @@
 ---
-title: "How Commercial Content Moderation APIs<br>Over- and Under-Moderate Group-Targeted Hate Speech"
+title: "Commercial Content Moderation APIs Suck<br>At Moderating Group-Targeted Hate Speech"
 author: "David Hartmann, Amin Oueslati, Dimitri Staufer, Lena Pohlmann, Simon Munzert, Hendrik Heuer"
 institute: ""
 date: "<br>May 22, 2025<br><br><br>
