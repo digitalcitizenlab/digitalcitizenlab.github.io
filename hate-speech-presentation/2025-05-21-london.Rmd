@@ -600,6 +600,15 @@ class: inverse, center, middle
 </div>
 
 
+---
+# Agreement rates across speech types and subgroups
+
+<div style="margin-left: -2em; margin-right: -2em; padding-left: 0; padding-right: 0;">
+<div align="center">
+<img src="figures/agreement-cumulative-distributions.png" style="width:80%; height: auto;">
+</div>
+</div>
+
 
 
 ---
